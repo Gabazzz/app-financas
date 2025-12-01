@@ -11,7 +11,11 @@ import {
   AlertCircle,
   Wallet,
   CheckCircle2,
-  Trash2
+  Trash2,
+  Smartphone,
+  X,
+  Share,
+  MoreVertical
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend,
@@ -77,6 +81,62 @@ const ProgressBar = ({ current, total, color = "bg-blue-600" }) => {
   );
 };
 
+const InstallModal = ({ onClose }) => (
+  <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+    <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+      <div className="bg-slate-900 p-6 flex justify-between items-center text-white">
+        <h3 className="font-bold text-lg flex items-center gap-2">
+          <Smartphone size={20} className="text-emerald-400" />
+          Instalar no Celular
+        </h3>
+        <button onClick={onClose} className="hover:bg-slate-800 p-1 rounded-full transition">
+          <X size={20} />
+        </button>
+      </div>
+      
+      <div className="p-6 space-y-6">
+        <p className="text-slate-600 text-sm leading-relaxed">
+          Este sistema funciona como um <strong>App Web (PWA)</strong>. Você não precisa baixar na loja, basta adicionar o atalho!
+        </p>
+
+        <div className="space-y-4">
+          {/* iOS Instructions */}
+          <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <div className="bg-white p-2 rounded-lg shadow-sm">
+              <Share size={24} className="text-blue-500" />
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-800 text-sm mb-1">No iPhone (iOS)</h4>
+              <p className="text-xs text-slate-500">
+                1. Toque no botão <strong>Compartilhar</strong> (seta para cima).<br/>
+                2. Role para baixo e escolha <strong>"Adicionar à Tela de Início"</strong>.
+              </p>
+            </div>
+          </div>
+
+          {/* Android Instructions */}
+          <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <div className="bg-white p-2 rounded-lg shadow-sm">
+              <MoreVertical size={24} className="text-emerald-500" />
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-800 text-sm mb-1">No Android</h4>
+              <p className="text-xs text-slate-500">
+                1. Toque nos <strong>três pontinhos</strong> do Chrome.<br/>
+                2. Escolha <strong>"Adicionar à Tela Inicial"</strong> ou "Instalar App".
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <button onClick={onClose} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition shadow-lg shadow-emerald-200">
+          Entendi, vou tentar!
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 // --- APLICAÇÃO PRINCIPAL ---
 
 export default function FinanceApp() {
@@ -85,6 +145,7 @@ export default function FinanceApp() {
   const [transactions, setTransactions] = useState(initialTransactions);
   const [goals, setGoals] = useState(initialGoals);
   const [installments, setInstallments] = useState(initialInstallments);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   // Estados para formulário de transação
   const [newTransAmount, setNewTransAmount] = useState('');
@@ -119,8 +180,6 @@ export default function FinanceApp() {
     const balance = totalIncome - totalExpense - totalReserved;
     
     // Cálculo do Limite Diário Dinâmico
-    // (Receita Planejada - Despesas Fixas Já Ocorridas - Reservas) / Dias Restantes
-    // Simplificação para o app: Saldo Atual / Dias Restantes
     const dailyLimit = daysRemaining > 0 ? (balance / daysRemaining) : 0;
 
     return { totalIncome, totalExpense, totalReserved, balance, dailyLimit, plannedIncome, plannedExpense };
@@ -165,7 +224,7 @@ export default function FinanceApp() {
   // --- RENDERIZAÇÃO DAS ABAS ---
 
   const renderDashboard = () => (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-24 md:pb-0">
       {/* Cards Superiores */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card 
@@ -254,7 +313,7 @@ export default function FinanceApp() {
   );
 
   const renderControl = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24 md:pb-0">
       {/* Formulário de Adição */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
         <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
@@ -347,7 +406,7 @@ export default function FinanceApp() {
   );
 
   const renderCategories = () => (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden pb-24 md:pb-0">
       <div className="p-6 border-b border-slate-100 flex justify-between items-center">
         <h3 className="font-bold text-slate-700">Estrutura de Orçamento</h3>
         <span className="text-sm text-slate-500">Total Planejado: {formatCurrency(summary.plannedIncome)}</span>
@@ -383,7 +442,7 @@ export default function FinanceApp() {
   );
 
   const renderGoals = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-24 md:pb-0">
       {/* Metas */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
         <div className="flex items-center justify-between mb-6">
@@ -435,35 +494,64 @@ export default function FinanceApp() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 md:pb-0">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 md:pb-0 relative">
       
+      {showInstallHelp && <InstallModal onClose={() => setShowInstallHelp(false)} />}
+
       {/* Sidebar / Menu Mobile */}
-      <div className="fixed bottom-0 left-0 w-full md:w-64 md:h-full bg-white border-t md:border-t-0 md:border-r border-slate-200 z-50 md:block flex justify-around p-2 md:p-6">
-        <div className="hidden md:flex items-center gap-2 mb-10 text-emerald-600">
-          <Wallet size={32} />
-          <h1 className="text-2xl font-bold tracking-tight">Finanças<span className="text-slate-800">Pro</span></h1>
-        </div>
+      <div className="fixed bottom-0 left-0 w-full md:w-64 md:h-full bg-white border-t md:border-t-0 md:border-r border-slate-200 z-50 flex flex-row md:flex-col justify-between p-2 md:p-6">
         
-        <nav className="flex md:flex-col gap-1 md:gap-2 w-full">
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'control', label: 'Controle Diário', icon: List },
-            { id: 'categories', label: 'Categorias', icon: CalendarDays },
-            { id: 'goals', label: 'Metas e Dívidas', icon: Target },
-          ].map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col md:flex-row items-center md:gap-3 p-2 md:px-4 md:py-3 rounded-lg text-xs md:text-sm font-medium transition-colors
-                ${activeTab === item.id 
-                  ? 'bg-emerald-50 text-emerald-700' 
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
-            >
-              <item.icon size={20} className={activeTab === item.id ? 'text-emerald-600' : 'text-slate-400'} />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
+        {/* Logo e Menu Principal */}
+        <div className="flex flex-row md:flex-col w-full md:h-auto justify-around md:justify-start">
+          <div className="hidden md:flex items-center gap-2 mb-10 text-emerald-600">
+            <Wallet size={32} />
+            <h1 className="text-2xl font-bold tracking-tight">Finanças<span className="text-slate-800">Pro</span></h1>
+          </div>
+          
+          <nav className="flex md:flex-col gap-1 md:gap-2 w-full">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+              { id: 'control', label: 'Lançamentos', icon: List },
+              { id: 'categories', label: 'Categorias', icon: CalendarDays },
+              { id: 'goals', label: 'Metas', icon: Target },
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex flex-col md:flex-row items-center md:gap-3 p-2 md:px-4 md:py-3 rounded-lg text-[10px] md:text-sm font-medium transition-colors
+                  ${activeTab === item.id 
+                    ? 'bg-emerald-50 text-emerald-700' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <item.icon size={20} className={activeTab === item.id ? 'text-emerald-600' : 'text-slate-400'} />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Botão de Instalar App (Footer da Sidebar) */}
+        <div className="hidden md:block border-t border-slate-100 pt-4 mt-auto">
+          <button 
+            onClick={() => setShowInstallHelp(true)}
+            className="flex items-center gap-3 p-4 rounded-xl bg-slate-900 text-white w-full hover:bg-slate-800 transition shadow-lg shadow-slate-200 group"
+          >
+            <Smartphone size={20} className="text-emerald-400 group-hover:scale-110 transition" />
+            <div className="text-left">
+              <p className="text-xs text-slate-400 font-medium">Disponível para celular</p>
+              <p className="text-sm font-bold">Instalar App</p>
+            </div>
+          </button>
+        </div>
+
+        {/* Botão Flutuante Mobile para Instalar */}
+        <button 
+          onClick={() => setShowInstallHelp(true)}
+          className="md:hidden absolute -top-16 right-4 bg-slate-900 text-white p-3 rounded-full shadow-lg border border-slate-800 flex items-center justify-center animate-bounce-slow"
+        >
+          <Smartphone size={20} className="text-emerald-400" />
+        </button>
+
       </div>
 
       {/* Conteúdo Principal */}
@@ -480,7 +568,7 @@ export default function FinanceApp() {
             </p>
           </div>
           <div className="hidden md:block">
-            <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition shadow-lg shadow-slate-200">
+            <button className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 transition">
               Exportar Relatório
             </button>
           </div>
