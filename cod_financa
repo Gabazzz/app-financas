@@ -1,0 +1,496 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  LayoutDashboard, 
+  List, 
+  CalendarDays, 
+  Target, 
+  CreditCard, 
+  PlusCircle, 
+  TrendingUp, 
+  TrendingDown, 
+  AlertCircle,
+  Wallet,
+  CheckCircle2,
+  Trash2
+} from 'lucide-react';
+import { 
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid
+} from 'recharts';
+
+// --- CONFIGURAÇÃO INICIAL E DADOS MOCK ---
+
+const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6', '#EC4899', '#6366F1'];
+
+const initialCategories = [
+  { id: 1, group: 'ENTRADAS', name: 'Salário', type: 'Entrada', essential: true, frequency: 'Mensal', budget: 5000 },
+  { id: 2, group: 'ENTRADAS', name: 'Extras', type: 'Entrada', essential: false, frequency: 'Eventual', budget: 500 },
+  { id: 3, group: 'MORADIA', name: 'Luz', type: 'Saída', essential: true, frequency: 'Mensal', budget: 200 },
+  { id: 4, group: 'MORADIA', name: 'Internet', type: 'Saída', essential: true, frequency: 'Mensal', budget: 100 },
+  { id: 5, group: 'ALIMENTAÇÃO', name: 'Comida', type: 'Saída', essential: true, frequency: 'Diário', budget: 600 },
+  { id: 6, group: 'ALIMENTAÇÃO', name: 'Feira', type: 'Saída', essential: true, frequency: 'Semanal', budget: 300 },
+  { id: 7, group: 'TRANSPORTE', name: 'Uber', type: 'Saída', essential: false, frequency: 'Eventual', budget: 200 },
+  { id: 8, group: 'SAÚDE', name: 'Farmácia', type: 'Saída', essential: true, frequency: 'Eventual', budget: 150 },
+  { id: 9, group: 'LAZER', name: 'Delivery', type: 'Saída', essential: false, frequency: 'Semanal', budget: 250 },
+  { id: 10, group: 'RESERVAS', name: 'Poupança', type: 'Reserva', essential: true, frequency: 'Mensal', budget: 500 },
+];
+
+const initialTransactions = [
+  { id: 1, date: '2023-11-01', categoryId: 1, amount: 5000, description: 'Salário Mensal' },
+  { id: 2, date: '2023-11-02', categoryId: 3, amount: 185.50, description: 'Conta de Luz' },
+  { id: 3, date: '2023-11-03', categoryId: 5, amount: 45.00, description: 'Almoço Restaurante' },
+  { id: 4, date: '2023-11-05', categoryId: 6, amount: 120.00, description: 'Feira Semanal' },
+  { id: 5, date: '2023-11-06', categoryId: 9, amount: 89.90, description: 'Pizza Fim de semana' },
+];
+
+const initialGoals = [
+  { id: 1, name: 'Viagem Fim de Ano', target: 3000, current: 1200 },
+  { id: 2, name: 'Notebook Novo', target: 5000, current: 2500 },
+];
+
+const initialInstallments = [
+  { id: 1, name: 'TV Sala', total: 2000, parcelValue: 200, currentParcel: 5, totalParcels: 10 },
+  { id: 2, name: 'Celular', total: 3500, parcelValue: 350, currentParcel: 2, totalParcels: 10 },
+];
+
+// --- COMPONENTES AUXILIARES ---
+
+const Card = ({ title, value, subtext, colorClass, icon: Icon }) => (
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-start justify-between">
+    <div>
+      <p className="text-slate-500 text-sm font-medium mb-1">{title}</p>
+      <h3 className={`text-2xl font-bold ${colorClass}`}>{value}</h3>
+      {subtext && <p className="text-slate-400 text-xs mt-2">{subtext}</p>}
+    </div>
+    <div className={`p-3 rounded-lg ${colorClass.replace('text-', 'bg-').replace('600', '100')}`}>
+      <Icon className={`w-6 h-6 ${colorClass}`} />
+    </div>
+  </div>
+);
+
+const ProgressBar = ({ current, total, color = "bg-blue-600" }) => {
+  const percent = Math.min((current / total) * 100, 100);
+  return (
+    <div className="w-full bg-slate-100 rounded-full h-2.5 mt-2">
+      <div className={`h-2.5 rounded-full ${color}`} style={{ width: `${percent}%` }}></div>
+    </div>
+  );
+};
+
+// --- APLICAÇÃO PRINCIPAL ---
+
+export default function FinanceApp() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [categories, setCategories] = useState(initialCategories);
+  const [transactions, setTransactions] = useState(initialTransactions);
+  const [goals, setGoals] = useState(initialGoals);
+  const [installments, setInstallments] = useState(initialInstallments);
+
+  // Estados para formulário de transação
+  const [newTransAmount, setNewTransAmount] = useState('');
+  const [newTransDesc, setNewTransDesc] = useState('');
+  const [newTransCat, setNewTransCat] = useState('');
+  const [newTransDate, setNewTransDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // --- CÁLCULOS AUTOMÁTICOS (ENGINE DA PLANILHA) ---
+
+  const currentMonth = new Date().getMonth();
+  const daysInMonth = new Date(new Date().getFullYear(), currentMonth + 1, 0).getDate();
+  const currentDay = new Date().getDate();
+  const daysRemaining = daysInMonth - currentDay;
+
+  const summary = useMemo(() => {
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let totalReserved = 0;
+
+    transactions.forEach(t => {
+      const cat = categories.find(c => c.id === parseInt(t.categoryId));
+      if (!cat) return;
+      if (cat.type === 'Entrada') totalIncome += t.amount;
+      else if (cat.type === 'Reserva') totalReserved += t.amount;
+      else totalExpense += t.amount;
+    });
+
+    // Orçamento Previsto
+    const plannedIncome = categories.filter(c => c.type === 'Entrada').reduce((acc, curr) => acc + curr.budget, 0);
+    const plannedExpense = categories.filter(c => c.type === 'Saída').reduce((acc, curr) => acc + curr.budget, 0);
+
+    const balance = totalIncome - totalExpense - totalReserved;
+    
+    // Cálculo do Limite Diário Dinâmico
+    // (Receita Planejada - Despesas Fixas Já Ocorridas - Reservas) / Dias Restantes
+    // Simplificação para o app: Saldo Atual / Dias Restantes
+    const dailyLimit = daysRemaining > 0 ? (balance / daysRemaining) : 0;
+
+    return { totalIncome, totalExpense, totalReserved, balance, dailyLimit, plannedIncome, plannedExpense };
+  }, [transactions, categories, daysRemaining]);
+
+  const expensesByCategory = useMemo(() => {
+    const data = [];
+    categories.filter(c => c.type === 'Saída').forEach(cat => {
+      const amount = transactions
+        .filter(t => t.categoryId === cat.id)
+        .reduce((acc, curr) => acc + curr.amount, 0);
+      if (amount > 0) {
+        data.push({ name: cat.name, value: amount });
+      }
+    });
+    return data;
+  }, [transactions, categories]);
+
+  const handleAddTransaction = (e) => {
+    e.preventDefault();
+    if (!newTransAmount || !newTransCat) return;
+
+    const newTrans = {
+      id: Date.now(),
+      date: newTransDate,
+      categoryId: parseInt(newTransCat),
+      amount: parseFloat(newTransAmount),
+      description: newTransDesc || 'Sem descrição'
+    };
+
+    setTransactions([...transactions, newTrans]);
+    setNewTransAmount('');
+    setNewTransDesc('');
+  };
+
+  const deleteTransaction = (id) => {
+    setTransactions(transactions.filter(t => t.id !== id));
+  };
+
+  const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+  // --- RENDERIZAÇÃO DAS ABAS ---
+
+  const renderDashboard = () => (
+    <div className="space-y-6 animate-fade-in">
+      {/* Cards Superiores */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card 
+          title="Saldo Atual" 
+          value={formatCurrency(summary.balance)} 
+          subtext="Disponível em caixa"
+          colorClass="text-emerald-600" 
+          icon={Wallet} 
+        />
+        <Card 
+          title="Gastos do Mês" 
+          value={formatCurrency(summary.totalExpense)} 
+          subtext={`De ${formatCurrency(summary.plannedExpense)} previstos`}
+          colorClass="text-rose-600" 
+          icon={TrendingDown} 
+        />
+        <Card 
+          title="Limite Diário Hoje" 
+          value={formatCurrency(summary.dailyLimit)} 
+          subtext={daysRemaining + " dias restantes"}
+          colorClass={summary.dailyLimit < 50 ? "text-rose-600" : "text-blue-600"} 
+          icon={CalendarDays} 
+        />
+        <Card 
+          title="Reservas" 
+          value={formatCurrency(summary.totalReserved)} 
+          subtext="Guardado este mês"
+          colorClass="text-purple-600" 
+          icon={Target} 
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Gráfico de Distribuição */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+          <h3 className="font-bold text-slate-700 mb-4">Distribuição de Gastos</h3>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={expensesByCategory}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {expensesByCategory.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip formatter={(value) => formatCurrency(value)} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Resumo de Saúde Financeira */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-center space-y-6">
+          <h3 className="font-bold text-slate-700">Saúde Financeira</h3>
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-slate-600">Gastos vs Orçamento</span>
+              <span className="font-semibold text-slate-800">
+                {Math.round((summary.totalExpense / summary.plannedExpense) * 100)}%
+              </span>
+            </div>
+            <ProgressBar current={summary.totalExpense} total={summary.plannedExpense} color={summary.totalExpense > summary.plannedExpense ? 'bg-rose-500' : 'bg-emerald-500'} />
+          </div>
+          
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+            <h4 className="font-semibold text-blue-800 flex items-center gap-2">
+              <AlertCircle size={18} />
+              Insight Automático
+            </h4>
+            <p className="text-sm text-blue-700 mt-1">
+              Com seu saldo atual de <strong>{formatCurrency(summary.balance)}</strong> e <strong>{daysRemaining}</strong> dias restantes, 
+              você deve manter seus gastos abaixo de <strong>{formatCurrency(summary.dailyLimit)}</strong> por dia para não fechar no vermelho.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderControl = () => (
+    <div className="space-y-6">
+      {/* Formulário de Adição */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+          <PlusCircle size={20} className="text-emerald-500"/>
+          Novo Lançamento
+        </h3>
+        <form onSubmit={handleAddTransaction} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <input 
+            type="date" 
+            value={newTransDate}
+            onChange={(e) => setNewTransDate(e.target.value)}
+            className="border rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+          />
+          <select 
+            value={newTransCat}
+            onChange={(e) => setNewTransCat(e.target.value)}
+            className="border rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+          >
+            <option value="">Selecione Categoria</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+            ))}
+          </select>
+          <input 
+            type="text" 
+            placeholder="Descrição (ex: Padaria)" 
+            value={newTransDesc}
+            onChange={(e) => setNewTransDesc(e.target.value)}
+            className="border rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+          />
+          <input 
+            type="number" 
+            placeholder="Valor (R$)" 
+            value={newTransAmount}
+            onChange={(e) => setNewTransAmount(e.target.value)}
+            className="border rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+          />
+          <button type="submit" className="bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition">
+            Adicionar
+          </button>
+        </form>
+      </div>
+
+      {/* Tabela de Lançamentos */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="p-4 font-semibold text-slate-600">Data</th>
+              <th className="p-4 font-semibold text-slate-600">Categoria</th>
+              <th className="p-4 font-semibold text-slate-600">Descrição</th>
+              <th className="p-4 font-semibold text-slate-600">Valor</th>
+              <th className="p-4 font-semibold text-slate-600 text-right">Ação</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {transactions.slice().reverse().map(t => {
+              const cat = categories.find(c => c.id === t.categoryId);
+              return (
+                <tr key={t.id} className="hover:bg-slate-50 transition">
+                  <td className="p-4 text-slate-600">{new Date(t.date).toLocaleDateString('pt-BR')}</td>
+                  <td className="p-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium 
+                      ${cat?.type === 'Entrada' ? 'bg-emerald-100 text-emerald-700' : 
+                        cat?.type === 'Reserva' ? 'bg-purple-100 text-purple-700' : 'bg-rose-100 text-rose-700'}`}>
+                      {cat?.name}
+                    </span>
+                  </td>
+                  <td className="p-4 text-slate-800 font-medium">{t.description}</td>
+                  <td className={`p-4 font-bold ${cat?.type === 'Entrada' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {cat?.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}
+                  </td>
+                  <td className="p-4 text-right">
+                    <button onClick={() => deleteTransaction(t.id)} className="text-slate-400 hover:text-rose-500">
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {transactions.length === 0 && (
+          <div className="p-8 text-center text-slate-400">
+            Nenhuma transação lançada ainda.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderCategories = () => (
+    <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+        <h3 className="font-bold text-slate-700">Estrutura de Orçamento</h3>
+        <span className="text-sm text-slate-500">Total Planejado: {formatCurrency(summary.plannedIncome)}</span>
+      </div>
+      <table className="w-full text-left text-sm">
+        <thead className="bg-slate-50 border-b border-slate-200">
+          <tr>
+            <th className="p-4 font-semibold text-slate-600">Grupo</th>
+            <th className="p-4 font-semibold text-slate-600">Categoria</th>
+            <th className="p-4 font-semibold text-slate-600">Frequência</th>
+            <th className="p-4 font-semibold text-slate-600">Tipo</th>
+            <th className="p-4 font-semibold text-slate-600 text-right">Orçamento</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {categories.map(c => (
+            <tr key={c.id} className="hover:bg-slate-50">
+              <td className="p-4 font-medium text-slate-500">{c.group}</td>
+              <td className="p-4 font-bold text-slate-700">{c.name}</td>
+              <td className="p-4 text-slate-600">{c.frequency}</td>
+              <td className="p-4">
+                <span className={`px-2 py-1 rounded text-xs font-medium 
+                   ${c.essential ? 'bg-blue-50 text-blue-700' : 'bg-yellow-50 text-yellow-700'}`}>
+                  {c.essential ? 'Essencial' : 'Supérfluo'}
+                </span>
+              </td>
+              <td className="p-4 text-right font-mono text-slate-600">{formatCurrency(c.budget)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderGoals = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Metas */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="font-bold text-slate-700 flex items-center gap-2">
+            <Target className="text-purple-500" size={20}/>
+            Metas de Poupança
+          </h3>
+        </div>
+        <div className="space-y-6">
+          {goals.map(goal => (
+            <div key={goal.id}>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="font-medium text-slate-700">{goal.name}</span>
+                <span className="text-slate-500">{formatCurrency(goal.current)} de {formatCurrency(goal.target)}</span>
+              </div>
+              <ProgressBar current={goal.current} total={goal.target} color="bg-purple-500" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Parcelamentos */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="font-bold text-slate-700 flex items-center gap-2">
+            <CreditCard className="text-rose-500" size={20}/>
+            Parcelamentos Ativos
+          </h3>
+        </div>
+        <div className="space-y-6">
+          {installments.map(inst => (
+            <div key={inst.id} className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-bold text-slate-700">{inst.name}</span>
+                <span className="text-xs bg-slate-200 px-2 py-1 rounded text-slate-600">
+                  {inst.currentParcel}/{inst.totalParcels}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm text-slate-500">
+                <span>Valor Parcela: {formatCurrency(inst.parcelValue)}</span>
+                <span>Restante: {formatCurrency(inst.total - (inst.parcelValue * inst.currentParcel))}</span>
+              </div>
+              <ProgressBar current={inst.currentParcel} total={inst.totalParcels} color="bg-rose-500" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 md:pb-0">
+      
+      {/* Sidebar / Menu Mobile */}
+      <div className="fixed bottom-0 left-0 w-full md:w-64 md:h-full bg-white border-t md:border-t-0 md:border-r border-slate-200 z-50 md:block flex justify-around p-2 md:p-6">
+        <div className="hidden md:flex items-center gap-2 mb-10 text-emerald-600">
+          <Wallet size={32} />
+          <h1 className="text-2xl font-bold tracking-tight">Finanças<span className="text-slate-800">Pro</span></h1>
+        </div>
+        
+        <nav className="flex md:flex-col gap-1 md:gap-2 w-full">
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'control', label: 'Controle Diário', icon: List },
+            { id: 'categories', label: 'Categorias', icon: CalendarDays },
+            { id: 'goals', label: 'Metas e Dívidas', icon: Target },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex flex-col md:flex-row items-center md:gap-3 p-2 md:px-4 md:py-3 rounded-lg text-xs md:text-sm font-medium transition-colors
+                ${activeTab === item.id 
+                  ? 'bg-emerald-50 text-emerald-700' 
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+            >
+              <item.icon size={20} className={activeTab === item.id ? 'text-emerald-600' : 'text-slate-400'} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Conteúdo Principal */}
+      <main className="md:ml-64 p-4 md:p-8 max-w-7xl mx-auto">
+        <header className="mb-8 flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800 capitalize">
+              {activeTab === 'dashboard' ? 'Visão Geral' : 
+               activeTab === 'control' ? 'Controle de Gastos' :
+               activeTab === 'categories' ? 'Categorias' : 'Metas e Parcelamentos'}
+            </h2>
+            <p className="text-slate-500 text-sm mt-1">
+              Hoje é dia {currentDay} • {daysRemaining} dias restantes no mês
+            </p>
+          </div>
+          <div className="hidden md:block">
+            <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition shadow-lg shadow-slate-200">
+              Exportar Relatório
+            </button>
+          </div>
+        </header>
+
+        {activeTab === 'dashboard' && renderDashboard()}
+        {activeTab === 'control' && renderControl()}
+        {activeTab === 'categories' && renderCategories()}
+        {activeTab === 'goals' && renderGoals()}
+      </main>
+    </div>
+  );
+}
